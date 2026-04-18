@@ -15,7 +15,7 @@ ACCESS_TOKEN = st.secrets.get("ACCESS_TOKEN", "")
 EXPIRY_DATE  = st.secrets.get("EXPIRY_DATE", "2026-04-21")
 TG_BOT_TOKEN = st.secrets.get("TG_BOT_TOKEN", "")
 TG_CHAT_ID   = st.secrets.get("TG_CHAT_ID", "")
-REFRESH_RATE = 5  # seconds
+REFRESH_RATE = 15  # seconds
 
 MARKET_OPEN  = dtime(9, 30)
 MARKET_CLOSE = dtime(15, 30)
@@ -232,7 +232,8 @@ if is_market_open():
 # ── UI ────────────────────────────────────────────────
 
 # Title + market status
-now_time = datetime.now().time()
+from zoneinfo import ZoneInfo
+now_time = datetime.now(ZoneInfo("Asia/Kolkata")).time()
 market_open_now = is_market_open()
 if market_open_now:
     status_html = '''<div class="market-status" style="background:#1d4d2b;color:#2ecc71;">
