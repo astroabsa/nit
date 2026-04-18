@@ -108,7 +108,7 @@ init_state()
 def is_market_open():
     from zoneinfo import ZoneInfo
     now_time = datetime.now(ZoneInfo("Asia/Kolkata")).time()
-    return MARKET_OPEN <= now <= MARKET_CLOSE
+    return MARKET_OPEN <= now_time <= MARKET_CLOSE
 
 # ── Helpers ──────────────────────────────────────────
 def send_telegram(msg):
