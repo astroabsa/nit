@@ -6,6 +6,7 @@ import threading
 from datetime import datetime, time as dtime
 import matplotlib.pyplot as plt
 import matplotlib.ticker as mticker
+from streamlit_autorefresh import st_autorefresh
 
 # ======================================================
 # 🔑 CONFIG — Set via .streamlit/secrets.toml
@@ -214,6 +215,10 @@ def analyze(data, spot, vix):
         st.session_state["error"] = f"❌ ANALYSIS ERROR: {str(e)[:50]}"
 
 # ── Auto-fetch if market is open ─────────────────────
+# Auto-refresh: every 5s during market hours, every 30s outside
+refresh_interval = REFRESH_RATE * 1000 if is_market_open() else 30_000
+st_autorefresh(interval=refresh_interval, key="auto_refresh")
+
 if is_market_open():
     if ACCESS_TOKEN:
         spot, vix = get_market_data()
@@ -223,13 +228,6 @@ if is_market_open():
                 analyze(chain, spot, vix)
     else:
         st.session_state["error"] = "❌ ACCESS_TOKEN not set — add it to .streamlit/secrets.toml"
-    # Schedule next refresh
-    time.sleep(REFRESH_RATE)
-    st.rerun()
-else:
-    # Outside market hours — show countdown, refresh every 30s
-    time.sleep(30)
-    st.rerun()
 
 # ── UI ────────────────────────────────────────────────
 
