@@ -106,7 +106,8 @@ init_state()
 
 # ── Market hours check ───────────────────────────────
 def is_market_open():
-    now = datetime.now().time()
+    from zoneinfo import ZoneInfo
+    now_time = datetime.now(ZoneInfo("Asia/Kolkata")).time()
     return MARKET_OPEN <= now <= MARKET_CLOSE
 
 # ── Helpers ──────────────────────────────────────────
