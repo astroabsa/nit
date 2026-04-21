@@ -7,6 +7,7 @@ from datetime import datetime, time as dtime
 import matplotlib.pyplot as plt
 import matplotlib.ticker as mticker
 from streamlit_autorefresh import st_autorefresh
+from zoneinfo import ZoneInfo
 
 # ======================================================
 # 🔑 CONFIG — Set via .streamlit/secrets.toml
@@ -288,7 +289,7 @@ m1.metric("📊 NIFTY SPOT", spot_val)
 m2.metric("📐 PCR",        pcr_val)
 m3.metric("⚡ VIX",         vix_val, delta=vix_delta)
 m4.metric("🎯 BULL PROB",  f"{bull_p:.0f}%")
-m5.metric("🕐 LAST UPDATE", datetime.now().strftime("%H:%M:%S"))
+m5.metric("🕐 LAST UPDATE", datetime.now(ZoneInfo("Asia/Kolkata")).strftime("%H:%M:%S"))
 
 # ── Bull-Bear Bar ─────────────────────────────────────
 bp = bull_p / 100
