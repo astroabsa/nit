@@ -1,7 +1,6 @@
 import streamlit as st
 import requests
 import pandas as pd
-import time
 import threading
 from datetime import datetime, time as dtime
 import matplotlib.pyplot as plt
@@ -13,11 +12,12 @@ from zoneinfo import ZoneInfo
 # 🔑 CONFIG — Set via .streamlit/secrets.toml
 # ======================================================
 ACCESS_TOKEN = st.secrets.get("ACCESS_TOKEN", "")
-EXPIRY_DATE  = st.secrets.get("EXPIRY_DATE", "2026-04-21")
+EXPIRY_DATE  = st.secrets.get("EXPIRY_DATE", "2026-04-24")
 TG_BOT_TOKEN = st.secrets.get("TG_BOT_TOKEN", "")
 TG_CHAT_ID   = st.secrets.get("TG_CHAT_ID", "")
 REFRESH_RATE = 15  # seconds
 
+IST = ZoneInfo("Asia/Kolkata")
 MARKET_OPEN  = dtime(9, 30)
 MARKET_CLOSE = dtime(15, 30)
 
@@ -91,7 +91,7 @@ def init_state():
         "spot": None, "vix": None, "pcr": None,
         "prev_vix": 0.0, "prev_spot": 0.0,
         "pcr_history": [], "vix_history": [],
-        "alert_msg": "⏳ WAITING FOR MARKET HOURS (9:30 AM – 3:30 PM)",
+        "alert_msg": "⏳ WAITING FOR MARKET HOURS (9:30 AM – 3:30 PM IST)",
         "alert_color": "#1e2d3d",
         "active_res": "--", "active_sup": "--", "battle": "--",
         "bull_prob": 50.0, "vix_chg": 0.0,
@@ -105,10 +105,10 @@ def init_state():
 
 init_state()
 
-# ── Market hours check ───────────────────────────────
+# ── Market hours check (IST) ─────────────────────────
 def is_market_open():
-    now_time = datetime.now(ZoneInfo("Asia/Kolkata")).time()
-    return MARKET_OPEN <= now_time <= MARKET_CLOSE
+    now_ist = datetime.now(IST).time()
+    return MARKET_OPEN <= now_ist <= MARKET_CLOSE
 
 # ── Helpers ──────────────────────────────────────────
 def send_telegram(msg):
@@ -176,15 +176,19 @@ def analyze(data, spot, vix):
         vix_chg   = ((vix - prev_vix) / prev_vix * 100) if prev_vix != 0 else 0.0
         bull_prob = max(5, min(95, 50 + (pcr - 1.0) * 40 + (vix_chg * -2)))
 
-        curr_time = datetime.now().strftime("%H:%M:%S")
+        now_ist = datetime.now(IST)
+        curr_time = now_ist.strftime("%H:%M:%S")
+
         h_pcr = st.session_state["pcr_history"]
         h_vix = st.session_state["vix_history"]
         if not h_pcr or h_pcr[-1][1] != pcr:
             h_pcr.append((curr_time, pcr))
-            if len(h_pcr) > 100: h_pcr.pop(0)
+            if len(h_pcr) > 100:
+                h_pcr.pop(0)
         if not h_vix or h_vix[-1][1] != vix:
             h_vix.append((curr_time, vix))
-            if len(h_vix) > 100: h_vix.pop(0)
+            if len(h_vix) > 100:
+                h_vix.pop(0)
 
         if spot > active_res:
             alert_msg, alert_color = "🚀 STRONG BREAKOUT", "#1d4d2b"
@@ -193,15 +197,14 @@ def analyze(data, spot, vix):
         else:
             alert_msg, alert_color = "⚖️ SIDEWAYS", "#2c3e50"
 
-        now = datetime.now()
-        if now.minute != st.session_state["last_minute"]:
+        if now_ist.minute != st.session_state["last_minute"]:
             direction = "BULLISH" if bull_prob >= 50 else "BEARISH"
             msg = (f"🧠 AI PREDICTION: {bull_prob:.0f}% {direction}\n"
                    f"Spot: {spot:.1f}\nPCR: {pcr:.2f}\nVIX: {vix:.2f}\n"
                    f"Active Res: {active_res}\nActive Sup: {active_sup}\n"
                    f"Status: {alert_msg}")
             threading.Thread(target=send_telegram, args=(msg,), daemon=True).start()
-            st.session_state["last_minute"] = now.minute
+            st.session_state["last_minute"] = now_ist.minute
 
         st.session_state.update({
             "spot": spot, "vix": vix, "pcr": pcr,
@@ -215,8 +218,7 @@ def analyze(data, spot, vix):
     except Exception as e:
         st.session_state["error"] = f"❌ ANALYSIS ERROR: {str(e)[:50]}"
 
-# ── Auto-fetch if market is open ─────────────────────
-# Auto-refresh: every 5s during market hours, every 30s outside
+# ── Auto-refresh ─────────────────────────────────────
 refresh_interval = REFRESH_RATE * 1000 if is_market_open() else 30_000
 st_autorefresh(interval=refresh_interval, key="auto_refresh")
 
@@ -231,36 +233,32 @@ if is_market_open():
         st.session_state["error"] = "❌ ACCESS_TOKEN not set — add it to .streamlit/secrets.toml"
 
 # ── UI ────────────────────────────────────────────────
-
-# Title + market status
-now_time = datetime.now(ZoneInfo("Asia/Kolkata")).time()
+now_ist = datetime.now(IST)
 market_open_now = is_market_open()
+
 if market_open_now:
     status_html = '''<div class="market-status" style="background:#1d4d2b;color:#2ecc71;">
-        🟢 MARKET OPEN — Scanner running automatically (9:30 AM – 3:30 PM)
+        🟢 MARKET OPEN — Scanner running automatically (9:30 AM – 3:30 PM IST)
     </div>'''
 else:
-    mins_to_open = None
-    now_dt = datetime.now()
-    open_dt = now_dt.replace(hour=9, minute=30, second=0, microsecond=0)
-    if now_dt < open_dt:
-        delta = open_dt - now_dt
+    open_dt = now_ist.replace(hour=9, minute=30, second=0, microsecond=0)
+    if now_ist < open_dt:
+        delta = open_dt - now_ist
         h, rem = divmod(int(delta.total_seconds()), 3600)
         m = rem // 60
         countdown = f"{h}h {m}m" if h else f"{m}m"
         status_html = f'''<div class="market-status" style="background:#2a1f0a;color:#e67e22;">
-            🟠 MARKET CLOSED — Opens in {countdown} &nbsp;|&nbsp; Scanner will auto-start at 9:30 AM
+            🟠 MARKET CLOSED — Opens in {countdown} &nbsp;|&nbsp; Scanner will auto-start at 9:30 AM IST
         </div>'''
     else:
         status_html = '''<div class="market-status" style="background:#2a0a0a;color:#e74c3c;">
-            🔴 MARKET CLOSED — Trading ended for today. Resumes at 9:30 AM
+            🔴 MARKET CLOSED — Trading ended for today. Resumes at 9:30 AM IST
         </div>'''
 
 st.markdown(f"### 📡 Nifty Intelligence Terminal v9.1 &nbsp;&nbsp;<span style='font-size:0.8rem;color:#555;'>Auto-refresh: {REFRESH_RATE}s</span>", unsafe_allow_html=True)
 st.markdown(status_html, unsafe_allow_html=True)
 st.divider()
 
-# ── Error Banner ─────────────────────────────────────
 if st.session_state.get("error"):
     st.markdown(
         f'''<div class="alert-box" style="background:#5c1d1d; color:#ff8a8a;">
@@ -268,28 +266,25 @@ if st.session_state.get("error"):
         unsafe_allow_html=True
     )
 
-# ── Alert box ────────────────────────────────────────
 st.markdown(
     f'''<div class="alert-box" style="background:{st.session_state["alert_color"]}; color:#ecf0f1;">
     {st.session_state["alert_msg"]}</div>''',
     unsafe_allow_html=True
 )
 
-# ── Header metrics ───────────────────────────────────
 m1, m2, m3, m4, m5 = st.columns(5)
 spot_val  = f"{st.session_state['spot']:,.2f}" if st.session_state["spot"] else "--"
-pcr_val   = f"{st.session_state['pcr']:.2f}"  if st.session_state["pcr"]  else "--"
-vix_val   = f"{st.session_state['vix']:.2f}"  if st.session_state["vix"]  else "--"
+pcr_val   = f"{st.session_state['pcr']:.2f}" if st.session_state["pcr"] else "--"
+vix_val   = f"{st.session_state['vix']:.2f}" if st.session_state["vix"] else "--"
 vix_delta = f"{st.session_state.get('vix_chg', 0.0):+.2f}%" if st.session_state["vix"] else None
 bull_p    = st.session_state["bull_prob"]
 
 m1.metric("📊 NIFTY SPOT", spot_val)
-m2.metric("📐 PCR",        pcr_val)
-m3.metric("⚡ VIX",         vix_val, delta=vix_delta)
-m4.metric("🎯 BULL PROB",  f"{bull_p:.0f}%")
-m5.metric("🕐 LAST UPDATE", datetime.now(ZoneInfo("Asia/Kolkata")).strftime("%H:%M:%S"))
+m2.metric("📐 PCR", pcr_val)
+m3.metric("⚡ VIX", vix_val, delta=vix_delta)
+m4.metric("🎯 BULL PROB", f"{bull_p:.0f}%")
+m5.metric("🕐 LAST UPDATE", datetime.now(IST).strftime("%H:%M:%S"))
 
-# ── Bull-Bear Bar ─────────────────────────────────────
 bp = bull_p / 100
 st.markdown(
     f'''<div style="display:flex;align-items:center;gap:12px;margin:4px 0;">
@@ -300,7 +295,6 @@ st.markdown(
 )
 st.progress(bp)
 
-# ── OI Charts + Wall Sidebar ─────────────────────────
 oi_col, wall_col = st.columns([4, 1])
 
 with oi_col:
@@ -315,12 +309,12 @@ with oi_col:
             ax.grid(True, alpha=0.12, color="#444")
 
         ax1.bar(subset["strike_price"] - 12, subset["call_options.market_data.oi"], width=24, color="#ff4d4d", label="Call OI")
-        ax1.bar(subset["strike_price"] + 12, subset["put_options.market_data.oi"],  width=24, color="#00ff88", label="Put OI")
+        ax1.bar(subset["strike_price"] + 12, subset["put_options.market_data.oi"], width=24, color="#00ff88", label="Put OI")
         ax1.set_title("Open Interest", color="#aaa", fontsize=8)
         ax1.legend(fontsize=6, facecolor="#1a1a1a", labelcolor="#ccc", framealpha=0.8)
 
         ax2.bar(subset["strike_price"] - 12, subset["call_chg_oi"], width=24, color="#ff4d4d", label="Call ΔOI")
-        ax2.bar(subset["strike_price"] + 12, subset["put_chg_oi"],  width=24, color="#00ff88", label="Put ΔOI")
+        ax2.bar(subset["strike_price"] + 12, subset["put_chg_oi"], width=24, color="#00ff88", label="Put ΔOI")
         ax2.set_title("Change in OI", color="#aaa", fontsize=8)
         ax2.legend(fontsize=6, facecolor="#1a1a1a", labelcolor="#ccc", framealpha=0.8)
 
@@ -332,7 +326,7 @@ with oi_col:
             '''<div style="background:#1a1a1a;border:1px solid #2a2a2a;border-radius:8px;
             height:180px;display:flex;align-items:center;justify-content:center;
             color:#555;font-size:0.85rem;">
-            📊 OI Charts will appear at 9:30 AM when market opens
+            📊 OI Charts will appear at 9:30 AM IST when market opens
             </div>''',
             unsafe_allow_html=True
         )
@@ -346,11 +340,11 @@ with wall_col:
             </div>''',
             unsafe_allow_html=True
         )
+
     mini_card("🔴 ACTIVE RES", str(st.session_state["active_res"]), "#e74c3c")
     mini_card("🟢 ACTIVE SUP", str(st.session_state["active_sup"]), "#2ecc71")
-    mini_card("⚔️ BATTLEGROUND", str(st.session_state["battle"]),   "#e67e22")
+    mini_card("⚔️ BATTLEGROUND", str(st.session_state["battle"]), "#e67e22")
 
-# ── Trend Charts ─────────────────────────────────────
 tc1, tc2 = st.columns(2)
 
 def plot_trend(ax, history, title, invert_color=False):
@@ -361,7 +355,7 @@ def plot_trend(ax, history, title, invert_color=False):
     if history and len(history) >= 2:
         t = [x[0] for x in history]
         v = [x[1] for x in history]
-        up  = v[-1] >= v[0]
+        up = v[-1] >= v[0]
         col = ("#e74c3c" if up else "#2ecc71") if invert_color else ("#2ecc71" if up else "#e74c3c")
         ax.plot(t, v, marker="o", color=col, linewidth=2, markersize=3)
         ax.xaxis.set_major_locator(mticker.MaxNLocator(5))
@@ -385,10 +379,9 @@ with tc2:
     st.pyplot(fig_vix, use_container_width=True)
     plt.close(fig_vix)
 
-# ── AI Advisor Row ────────────────────────────────────
-bull_p     = st.session_state["bull_prob"]
-direction  = "BULLISH 🐂" if bull_p >= 50 else "BEARISH 🐻"
-adv_color  = "#27ae60" if bull_p >= 50 else "#c0392b"
+bull_p = st.session_state["bull_prob"]
+direction = "BULLISH 🐂" if bull_p >= 50 else "BEARISH 🐻"
+adv_color = "#27ae60" if bull_p >= 50 else "#c0392b"
 
 st.markdown(
     f'''<div style="background:#0a0a0a;border:2px solid #3498db;border-radius:10px;
@@ -406,13 +399,12 @@ st.markdown(
     unsafe_allow_html=True
 )
 
-# ── Settings sidebar ──────────────────────────────────
 with st.sidebar:
     st.markdown("## ⚙️ Settings")
     st.markdown("**All credentials are loaded from `.streamlit/secrets.toml`**")
     st.markdown("---")
     st.markdown("### Expiry Date")
-    st.code(f"EXPIRY_DATE = \"{EXPIRY_DATE}\"")
+    st.code(f'EXPIRY_DATE = "{EXPIRY_DATE}"')
     st.caption("Update this in secrets.toml to change the expiry.")
     st.markdown("---")
     st.markdown("### Market Hours")
