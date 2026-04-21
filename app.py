@@ -288,7 +288,7 @@ m1.metric("📊 NIFTY SPOT", spot_val)
 m2.metric("📐 PCR",        pcr_val)
 m3.metric("⚡ VIX",         vix_val, delta=vix_delta)
 m4.metric("🎯 BULL PROB",  f"{bull_p:.0f}%")
-m5.metric("🕐 LAST UPDATE", datetime.now().time())
+m5.metric("🕐 LAST UPDATE", datetime.now().strftime("%H:%M:%S"))
 
 # ── Bull-Bear Bar ─────────────────────────────────────
 bp = bull_p / 100
